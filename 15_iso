@@ -68,12 +68,12 @@ iso_entry()
 		if [ -z "${prepare_root_cache}" ]; then
 			prepare_root_cache="$(prepare_grub_to_access_device ${GRUB_DEVICE} | grub_add_tab)"
 		fi
-		printf '%s\n' "${prepare_root_cache}" | sed "s/^/$submenu_indentation/"
+		printf '%s\n' "${prepare_root_cache}"
 	else
 		if [ -z "${prepare_boot_cache}" ]; then
 			prepare_boot_cache="$(prepare_grub_to_access_device ${GRUB_DEVICE_BOOT} | grub_add_tab)"
 		fi
-		printf '%s\n' "${prepare_boot_cache}" | sed "s/^/$submenu_indentation/"
+		printf '%s\n' "${prepare_boot_cache}"
 	fi
 
 	echo "	loopback loop \$isofile"
