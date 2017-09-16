@@ -1,0 +1,121 @@
+#!/bin/sh
+set -e
+# this is /etc/grub.d/15_iso
+
+prefix="/usr"
+exec_prefix="/usr"
+datarootdir="/usr/share"
+isodir="/iso"
+
+. "$pkgdatadir/grub-mkconfig_lib"
+
+export TEXTDOMAIN=grub
+export TEXTDOMAINDIR="${datarootdir}/locale"
+
+CLASS="--class gnu-linux --class gnu --class os"
+OS_pre="ISO:"
+initrd_pre=
+
+iso_entry()
+{
+	ifile="$1"
+	class="$2"
+	boottype="$3"
+	cmdline_add="$4"
+
+	case "$boottype" in
+		*casper*|*ubuntu*)
+			linuxfile="/casper/vmlinuz"
+			initrdfile="/casper/initrd.lz"
+			cmdline="boot=casper iso-scan/filename=$ifile noprompt noeject"
+			;;
+		*desinfect*)
+			linuxfile="/casper/vmlinuz.64"
+			initrdfile="/casper/initrd.lz"
+			cmdline="boot=casper iso-scan/filename=$ifile file=/cdrom/preseed/ubuntu.seed quiet splash memtest=4"
+			cmdline_appendix="debian-installer/language=de console-setup/layoutcode?=de"
+			;;
+		*)
+			echo "Warning: iso with unknown boot type. Skipping $ifile ..." >&2
+			return
+	esac
+
+	title="$OS_pre $ifile"
+	if test -n "$cmdline_add"; then
+		cmdline="${cmdline} ${cmdline_add}"
+		title="${title} (${cmdline_add})"
+	fi
+
+
+	echo "menuentry '$(echo "$title" | grub_quote)' ${class} ${CLASS} \$menuentry_id_option 'gnulinux-$ifile' {"
+	echo "	set isofile=${ifile}"
+
+	# Use ELILO's generic "efifb" when it's known to be available.
+	# FIXME: We need an interface to select vesafb in case efifb can't be used.
+	if [ "x$GRUB_GFXPAYLOAD_LINUX" = x ]; then
+		echo "	load_video"
+		echo "	set gfxpayload=keep"
+	else
+		if [ "x$GRUB_GFXPAYLOAD_LINUX" != xtext ]; then
+			echo "	load_video"
+		fi
+		echo "	set gfxpayload=$GRUB_GFXPAYLOAD_LINUX"
+	fi
+
+	echo "	insmod gzio"
+
+	if [ x$dirname = x/ ]; then
+		if [ -z "${prepare_root_cache}" ]; then
+			prepare_root_cache="$(prepare_grub_to_access_device ${GRUB_DEVICE} | grub_add_tab)"
+		fi
+		printf '%s\n' "${prepare_root_cache}" | sed "s/^/$submenu_indentation/"
+	else
+		if [ -z "${prepare_boot_cache}" ]; then
+			prepare_boot_cache="$(prepare_grub_to_access_device ${GRUB_DEVICE_BOOT} | grub_add_tab)"
+		fi
+		printf '%s\n' "${prepare_boot_cache}" | sed "s/^/$submenu_indentation/"
+	fi
+
+	echo "	loopback loop \$isofile"
+	printf "	echo 'Loading kernel %s from %s...'\n" "$linuxfile" "$ifile"
+	if test -n "$cmdline_appendix"; then
+		echo   "	linux (loop)${linuxfile} ${cmdline} -- ${cmdline_appendix}"
+	else
+		echo   "	linux (loop)${linuxfile} ${cmdline}"
+	fi
+	printf "	echo 'Loading initrd %s from %s...'\n" "$initrdfile" "$ifile"
+	echo   "	initrd ${initrd_pre} (loop)${initrdfile}"
+
+	echo "}"
+
+}
+
+prepare_boot_cache="${prepare_boot_cache}"
+prepare_root_cache="${prepare_root_cache}"
+boot_device_id="${boot_device_id}"
+
+if test -e "/boot/intel-ucode.img"; then
+	#initrd_pre="/boot/intel-ucode.img"
+	:
+fi
+
+echo "submenu 'Bootable ISO images' {"
+
+for i in "${isodir}"/desinfect/* "${isodir}"/*Desinfect* "${isodir}"/*desinfect*; do
+	if ! test -f "$i"; then
+		continue
+	fi
+	echo "Found Desinfect image: ${i} ..." >&2
+	iso_entry "$i" "--class desinfect" "desinfect"
+	iso_entry "$i" "--class desinfect" "desinfect" "xfce"
+done
+
+for i in "${isodir}"/ubuntu/* "${isodir}"/*ubuntu* "${isodir}"/*Ubuntu*; do
+	if ! test -f "$i"; then
+		continue
+	fi
+	echo "Found Ubuntu image: ${i} ..." >&2
+	iso_entry "$i" "--class ubuntu" "ubuntu"
+done
+
+echo "}"
