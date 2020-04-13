@@ -6,6 +6,6 @@ When runnung `grub-mkconfig -o /boot/grub/grub.cfg` or `update-grub` (depending 
 
 Supported isos are:
 * Ubuntu and variants like Kubuntu, etc.
-* Desinfect (ubuntu baased)
+* Desinfect 2017 (ubuntu baased)
 * Manjaro
 * Grml
