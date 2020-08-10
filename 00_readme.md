@@ -10,3 +10,6 @@ Supported isos are:
 * Manjaro
 * Grml
 * ArchLinux
+
+Dependencies:
+* libcdio (needs `iso-info` for getting file list of iso)
