@@ -12,4 +12,4 @@ Supported isos are:
 * ArchLinux
 
 Dependencies:
-* libcdio (needs `iso-info` for getting file list of iso)
+* libcdio (needs `iso-info` for getting file list of iso in some cases)
