@@ -10,6 +10,7 @@ Supported isos are:
 * Manjaro
 * Grml
 * ArchLinux
+* Any iso that has a `loopback.cfg` grub can read (usually /boot/grub/loopback.cfg)
 
 Dependencies:
 * libcdio (needs `iso-info` for getting file list of iso in some cases)
