@@ -9,3 +9,4 @@ Supported isos are:
 * Desinfect 2017 (ubuntu baased)
 * Manjaro
 * Grml
+* ArchLinux

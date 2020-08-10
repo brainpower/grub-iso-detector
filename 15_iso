@@ -4,6 +4,7 @@ set -e
 prefix="/usr"
 exec_prefix="/usr"
 datarootdir="/usr/share"
+isodir="/iso"
 
 . "$pkgdatadir/grub-mkconfig_lib"
 
@@ -16,101 +17,119 @@ initrd_pre=
 
 iso_entry()
 {
-        ifile="$1"
-        class="$2"
-        boottype="$3"
-        cmdline_add="$4"
-        manjaro_loopback=0
+  ifile="$1"
+  class="$2"
+  boottype="$3"
+  cmdline_add="$4"
+  use_loopback=0
 
-        case "$boottype" in
-                *casper*|*ubuntu*)
-                        linuxfile="/casper/vmlinuz"
-                        initrdfile="/casper/initrd.lz"
-                        cmdline="boot=casper iso-scan/filename=$ifile noprompt noeject"
-                        cmdline_appendix=""
-                        ;;
-                *desinfect*)
-                        linuxfile="/casper/vmlinuz.64"
-                        initrdfile="/casper/initrd.lz"
-                        cmdline="boot=casper iso-scan/filename=$ifile file=/cdrom/preseed/ubuntu.seed quiet splash memtest=4"
-                        cmdline_appendix="debian-installer/language=de console-setup/layoutcode?=de"
-                        ;;
-                *manjaro*)
-                        manjaro_loopback=1
-                        label="`strings $ifile | head -n 200000 | sed -n '/misolabel/s@.*misolabel=\([^ ]*\) .*$@\1@p'`"
-                        linuxfile="/boot/vmlinuz-x86_64"
-                        initrdfile="/boot/amd_ucode.img /boot/intel_ucode.img /boot/initramfs-x86_64.img"
-                        cmdline="misobasedir=manjaro misolabel=$label img_dev=/dev/disk/by-uuid/${GRUB_DEVICE_UUID} img_loop=\$isofile quiet systemd.show_status=1 driver=nonfree tz=Europe/Berlin lang=de_DE keytable=de"
-                        cmdline_appendix=""
-                        ;;
-                *grml*)
-                        linuxfile="/boot/grml64small/vmlinuz"
-                        initrdfile="/boot/grml64small/initrd.img"
-                        cmdline="boot=live live-media-path=/live/grml64-small/ bootid=grml64small201812 apm=power-off vga=791 nomce net.ifnames=0"
-                        cmdline_appendix=""
-                        ;;
-                *)
-                        echo "Warning: iso with unknown boot type. Skipping $ifile ..." >&2
-                        return
-        esac
+  loopback_cfg="$(iso-info "$ifile" -f | awk '/loopback.cfg/ {print $2}')"
+  if test -n "$loopback_cfg" && test -z "$cmdline_add"; then
+    echo "  Found 'loopback.cfg' in iso, using that..." >&2
+    use_loopback=1
+  else
 
-        title="$OS_pre $ifile"
-        if test -n "$cmdline_add"; then
-                cmdline="${cmdline} ${cmdline_add}"
-                title="${title} (${cmdline_add})"
-        fi
+    case "$boottype" in
+      *casper*|*ubuntu*)
+        # TODO: These assume theres only a single kernel initramfs, better loop over them and create entries for every one?
+        linuxfile="$( iso-info "$ifile" -f | awk '/vmlinuz/ { print $2 }')"
+        initrdfile="$(iso-info "$ifile" -f | awk '/initrd/  { print $2 }')"
+        cmdline="boot=casper iso-scan/filename=$ifile noprompt noeject"
+        cmdline_appendix=""
+        ;;
+      *desinfect*)
+        linuxfile="$( iso-info "$ifile" -f | awk '/vmlinuz.64/ { print $2 }')"
+        initrdfile="$(iso-info "$ifile" -f | awk '/initrd/  { print $2 }' | grep -v 'initrd.logo' | head -n 1)"
+        cmdline="boot=casper iso-scan/filename=$ifile file=/cdrom/preseed/ubuntu.seed quiet splash memtest=4"
+        cmdline_appendix="debian-installer/language=de console-setup/layoutcode?=de"
+        ;;
+      *manjaro*)
+        label="$(strings "$ifile" | head -n 200000 | sed -n '/misolabel/s@.*misolabel=\([^ ]*\) .*$@\1@p')"
+        linuxfile="/boot/vmlinuz-x86_64"
+        initrdfile="/boot/amd_ucode.img /boot/intel_ucode.img /boot/initramfs-x86_64.img"
+        cmdline="misobasedir=manjaro misolabel=$label img_dev=/dev/disk/by-uuid/${GRUB_DEVICE_UUID} img_loop=\$isofile quiet systemd.show_status=1 driver=nonfree tz=Europe/Berlin lang=de_DE keytable=de"
+        cmdline_appendix=""
+        ;;
+      *arch*)
+        label="$(strings "$ifile" | head -n 600000 | sed -n '/archisolabel/s@.*archisolabel=\([^ ]*\).*$@\1@p')"
+        linuxfile="/arch/boot/i686/vmlinuz"
+        initrdfile="/arch/boot/intel_ucode.img /arch/boot/amd_ucode.img /arch/boot/i686/archiso.img"
+        cmdline="archisobasedir=arch archisolabel=$label img_dev=/dev/disk/by-uuid/${GRUB_DEVICE_UUID} img_loop=\$iso_path earlymodules=loop"
+        cmdline_appendix=""
+        ;;
+      *grml*)
+        label="$(strings "$ifile" | head -n 600000 | sed -n '/bootid=/s@.*bootid=\([^ ]*\).*$@\1@p' | head -n 1)"
+        lmpath="$(strings "$ifile" | head -n 600000 | sed -n '/live-media-path=/s@.*live-media-path=\([^ ]*\).*$@\1@p' | head -n 1)"
+        linuxfile="$( iso-info "$ifile" -f | awk '/vmlinuz/ { print $2 }')"
+        initrdfile="$(iso-info "$ifile" -f | awk '/initrd/  { print $2 }')"
+        cmdline="boot=live live-media-path=$lmpath bootid=$label apm=power-off vga=791 nomce net.ifnames=0"
+        cmdline_appendix=""
+        ;;
+      *)
+        echo "Warning: iso with unknown boot type. Skipping $ifile ..." >&2
+        return
+    esac
+
+  fi
+
+  title="$OS_pre $ifile"
+  if test -n "$cmdline_add"; then
+    cmdline="${cmdline} ${cmdline_add}"
+    title="${title} (${cmdline_add})"
+  fi
 
 
-        echo "menuentry '$(echo "$title" | grub_quote)' ${class} ${CLASS} \$menuentry_id_option 'gnulinux-$ifile' {"
-        echo "  set iso_path=${ifile}"
-        echo "  export iso_path"
+  echo "menuentry '$(echo "$title" | grub_quote)' ${class} ${CLASS} \$menuentry_id_option 'gnulinux-$ifile' {"
+  echo "  set iso_path=${ifile}"
+  echo "  export iso_path"
 
   # Use ELILO's generic "efifb" when it's known to be available.
   # FIXME: We need an interface to select vesafb in case efifb can't be used.
   if [ "x$GRUB_GFXPAYLOAD_LINUX" = x ]; then
-                echo "  load_video"
-                echo "  set gfxpayload=keep"
-        else
-                if [ "x$GRUB_GFXPAYLOAD_LINUX" != xtext ]; then
-                        echo "  load_video"
-                fi
-                echo "  set gfxpayload=$GRUB_GFXPAYLOAD_LINUX"
+    echo "  load_video"
+    echo "  set gfxpayload=keep"
+  else
+    if [ "x$GRUB_GFXPAYLOAD_LINUX" != xtext ]; then
+      echo "  load_video"
+    fi
+    echo "  set gfxpayload=$GRUB_GFXPAYLOAD_LINUX"
   fi
 
-  echo "        insmod gzio"
+  echo "  insmod gzio"
 
-  if [ x$dirname = x/ ]; then
+  if [ "x$dirname" = "x/" ]; then
     if [ -z "${prepare_root_cache}" ]; then
-      prepare_root_cache="$(prepare_grub_to_access_device ${GRUB_DEVICE} | grub_add_tab)"
+      prepare_root_cache="$(prepare_grub_to_access_device "${GRUB_DEVICE}" | grub_add_tab)"
     fi
     printf '%s\n' "${prepare_root_cache}" | sed "s/^/$submenu_indentation/"
   else
     if [ -z "${prepare_boot_cache}" ]; then
-      prepare_boot_cache="$(prepare_grub_to_access_device ${GRUB_DEVICE_BOOT} | grub_add_tab)"
+      prepare_boot_cache="$(prepare_grub_to_access_device "${GRUB_DEVICE_BOOT}" | grub_add_tab)"
     fi
     printf '%s\n' "${prepare_boot_cache}" | sed "s/^/$submenu_indentation/"
   fi
 
-        echo "  set rootuuid=${GRUB_DEVICE_UUID}"
-        echo "  export rootuuid"
+  echo "  set rootuuid=${GRUB_DEVICE_UUID}"
+  echo "  export rootuuid"
 
-        echo "  loopback loop \$iso_path"
-        echo "  set root=\"(loop)\""
+  echo "  loopback loop \$iso_path"
+  echo "  set root=\"(loop)\""
 
-  if [ $manjaro_loopback -gt 0 ]; then
-        echo "  configfile /boot/grub/loopback.cfg"
-        echo "  loopback --delete loop"
-        else
-                printf "        echo 'Loading kernel %s from %s...'\n" "$linuxfile" "$ifile"
-                if test -n "$cmdline_appendix"; then
-                        echo   "        linux ${linuxfile} ${cmdline} -- ${cmdline_appendix}"
-                else
-                        echo   "        linux ${linuxfile} ${cmdline}"
-                fi
-                printf "        echo 'Loading initrd %s from %s...'\n" "$initrdfile" "$ifile"
-                echo   "        initrd ${initrd_pre} ${initrdfile}"
-        fi
-        echo "}"
+  if [ $use_loopback -gt 0 ]; then
+    printf "  echo 'Loading loopback.cfg from %s...'\n" "$ifile"
+    echo   "  configfile /boot/grub/loopback.cfg"
+    echo   "  loopback --delete loop"
+  else
+    printf "  echo 'Loading kernel %s from %s...'\n" "$linuxfile" "$ifile"
+    if test -n "$cmdline_appendix"; then
+      echo   "  linux ${linuxfile} ${cmdline} -- ${cmdline_appendix}"
+    else
+      echo   "  linux ${linuxfile} ${cmdline}"
+    fi
+    printf "  echo 'Loading initrd %s from %s...'\n" "$initrdfile" "$ifile"
+    echo   "  initrd ${initrd_pre} ${initrdfile}"
+  fi
+  echo "}"
 
 }
 
@@ -119,43 +138,51 @@ prepare_root_cache="${prepare_root_cache}"
 boot_device_id="${boot_device_id}"
 
 if test -e "/boot/intel-ucode.img"; then
-        #initrd_pre="/boot/intel-ucode.img"
-        :
+  #initrd_pre="/boot/intel-ucode.img"
+  :
 fi
 
 echo "submenu 'Bootable ISO images' {"
 
-for i in /iso/desinfect/* /iso/*Desinfect* /iso/*desinfect*; do
-        if ! test -f "$i"; then
-                continue
-        fi
-        echo "Found Desinfect image: ${i} ..." >&2
-        iso_entry "$i" "--class desinfect" "desinfect"
-        iso_entry "$i" "--class desinfect" "desinfect" "xfce"
+for i in "${isodir}"/arch/*; do
+  if ! test -f "$i"; then
+    continue
+  fi
+  echo "Found ArchLinux image: ${i} ..." >&2
+  iso_entry "$i" "--class arch" "arch"
 done
 
-for i in /iso/ubuntu/* /iso/*ubuntu* /iso/*Ubuntu*; do
-        if ! test -f "$i"; then
-                continue
-        fi
-        echo "Found Ubuntu image: ${i} ..." >&2
-        iso_entry "$i" "--class ubuntu" "ubuntu"
+for i in "${isodir}"/desinfect/* "${isodir}"/*Desinfect* "${isodir}"/*desinfect*; do
+  if ! test -f "$i"; then
+    continue
+  fi
+  echo "Found Desinfect image: ${i} ..." >&2
+  iso_entry "$i" "--class desinfect" "desinfect"
+  iso_entry "$i" "--class desinfect" "desinfect" "xfce"
 done
 
-for i in /iso/manjaro/*; do
-        if ! test -f "$i"; then
-                continue
-        fi
-        echo "Found Manjaro image: ${i} ..." >&2
-        iso_entry "$i" "--class manjaro" "manjaro"
+for i in "${isodir}"/ubuntu/* "${isodir}"/*ubuntu* "${isodir}"/*Ubuntu*; do
+  if ! test -f "$i"; then
+    continue
+  fi
+  echo "Found Ubuntu image: ${i} ..." >&2
+  iso_entry "$i" "--class ubuntu" "ubuntu"
 done
 
-for i in /iso/grml/*; do
-        if ! test -f "$i"; then
-                continue
-        fi
-        echo "Found Grml image: ${i} ..." >&2
-        iso_entry "$i" "--class grgml" "grml"
+for i in "${isodir}"/manjaro/*; do
+  if ! test -f "$i"; then
+    continue
+  fi
+  echo "Found Manjaro image: ${i} ..." >&2
+  iso_entry "$i" "--class manjaro" "manjaro"
+done
+
+for i in "${isodir}"/grml/*; do
+  if ! test -f "$i"; then
+    continue
+  fi
+  echo "Found Grml image: ${i} ..." >&2
+  iso_entry "$i" "--class grml" "grml"
 done
 
 echo "}"
