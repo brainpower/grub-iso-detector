@@ -136,6 +136,7 @@ iso_entry()
 prepare_boot_cache="${prepare_boot_cache}"
 prepare_root_cache="${prepare_root_cache}"
 boot_device_id="${boot_device_id}"
+empty=1
 
 if test -e "/boot/intel-ucode.img"; then
   #initrd_pre="/boot/intel-ucode.img"
@@ -150,6 +151,7 @@ for i in "${isodir}"/arch/*; do
   fi
   echo "Found ArchLinux image: ${i} ..." >&2
   iso_entry "$i" "--class arch" "arch"
+  empty=0
 done
 
 for i in "${isodir}"/desinfect/* "${isodir}"/*Desinfect* "${isodir}"/*desinfect*; do
@@ -159,6 +161,7 @@ for i in "${isodir}"/desinfect/* "${isodir}"/*Desinfect* "${isodir}"/*desinfect*
   echo "Found Desinfect image: ${i} ..." >&2
   iso_entry "$i" "--class desinfect" "desinfect"
   iso_entry "$i" "--class desinfect" "desinfect" "xfce"
+  empty=0
 done
 
 for i in "${isodir}"/ubuntu/* "${isodir}"/*ubuntu* "${isodir}"/*Ubuntu*; do
@@ -167,6 +170,7 @@ for i in "${isodir}"/ubuntu/* "${isodir}"/*ubuntu* "${isodir}"/*Ubuntu*; do
   fi
   echo "Found Ubuntu image: ${i} ..." >&2
   iso_entry "$i" "--class ubuntu" "ubuntu"
+  empty=0
 done
 
 for i in "${isodir}"/manjaro/*; do
@@ -175,6 +179,7 @@ for i in "${isodir}"/manjaro/*; do
   fi
   echo "Found Manjaro image: ${i} ..." >&2
   iso_entry "$i" "--class manjaro" "manjaro"
+  empty=0
 done
 
 for i in "${isodir}"/grml/*; do
@@ -183,6 +188,15 @@ for i in "${isodir}"/grml/*; do
   fi
   echo "Found Grml image: ${i} ..." >&2
   iso_entry "$i" "--class grml" "grml"
+  empty=0
 done
+
+if [ "x$empty" = "x1" ]; then
+  cat <<EOF
+menuentry "Dummy" {
+  linux dummy
+}
+EOF
+fi
 
 echo "}"
