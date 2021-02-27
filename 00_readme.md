@@ -14,3 +14,10 @@ Supported isos are:
 
 Dependencies:
 * libcdio (needs `iso-info` for getting file list of iso in some cases)
+
+For the EFI/bios coloring just add the 01_color file and this in `/etc/default/grub`:
+```
+GRUB_COLOR_EFI_NORMAL="light-red/black"
+GRUB_COLOR_EFI_HIGHLIGHT="light-cyan/red"
+export GRUB_COLOR_EFI_NORMAL GRUB_COLOR_EFI_HIGHLIGHT
+```
