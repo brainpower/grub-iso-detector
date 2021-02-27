@@ -1,0 +1,12 @@
+if [ x$GRUB_COLOR_NORMAL != x ] && [ x$GRUB_COLOR_HIGHLIGHT != x ] ; then
+    cat << EOF
+if [ "\$grub_platform" = "efi" ]; then
+  set menu_color_normal=$GRUB_COLOR_EFI_NORMAL
+  set menu_color_highlight=$GRUB_COLOR_EFI_HIGHLIGHT
+else
+  set menu_color_normal=$GRUB_COLOR_NORMAL
+  set menu_color_highlight=$GRUB_COLOR_HIGHLIGHT
+fi
+
+EOF
+fi
