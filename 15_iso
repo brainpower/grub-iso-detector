@@ -11,6 +11,8 @@ isodir="/iso"
 export TEXTDOMAIN=grub
 export TEXTDOMAINDIR="${datarootdir}/locale"
 
+# UUID of NTFS partition containing windows installer files copied from ISO
+WININST_UUID=""
 CLASS="--class gnu-linux --class gnu --class os"
 OS_pre="ISO:"
 initrd_pre=
@@ -200,3 +202,39 @@ EOF
 fi
 
 echo "}"
+
+
+if [ "x$WININST_UUID" != "x" ]; then
+  echo "menuentry 'Windows 10 Installer' --class windows --class os {"
+
+  # Use ELILO's generic "efifb" when it's known to be available.
+  # FIXME: We need an interface to select vesafb in case efifb can't be used.
+  if [ "x$GRUB_GFXPAYLOAD_LINUX" = x ]; then
+    echo "  load_video"
+    echo "  set gfxpayload=keep"
+  else
+    if [ "x$GRUB_GFXPAYLOAD_LINUX" != xtext ]; then
+      echo "  load_video"
+    fi
+    echo "  set gfxpayload=$GRUB_GFXPAYLOAD_LINUX"
+  fi
+
+  if [ -z "${prepare_wininst_cache}" ]; then
+    prepare_wininst_cache="$(prepare_grub_to_access_device "/dev/disk/by-uuid/${WININST_UUID}" | grub_add_tab)"
+  fi
+  printf '%s\n' "${prepare_wininst_cache}" | sed "s/^/$submenu_indentation/"
+
+  # EFI boot probably only works when GPT is used for the installer partition
+  # BIOS/MBR boot probably only works with DOS/MBR partitions
+  cat <<EOF
+    if [ "\$grub_platform" = "efi" ]; then
+      insmod chain
+      chainloader /efi/boot/bootx64.efi
+    else
+      insmod ntldr
+      drivemap -s (hd0) \${root}
+      ntldr /bootmgr
+    fi
+  }
+  EOF
+fi
