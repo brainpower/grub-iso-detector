@@ -52,10 +52,10 @@ iso_entry()
         cmdline="misobasedir=manjaro misolabel=$label img_dev=/dev/disk/by-uuid/${GRUB_DEVICE_UUID} img_loop=\$isofile quiet systemd.show_status=1 driver=nonfree tz=Europe/Berlin lang=de_DE keytable=de"
         cmdline_appendix=""
         ;;
-      *arch*)
-        label="$(strings "$ifile" | head -n 600000 | sed -n '/archisolabel/s@.*archisolabel=\([^ ]*\).*$@\1@p')"
-        linuxfile="/arch/boot/i686/vmlinuz"
-        initrdfile="/arch/boot/intel_ucode.img /arch/boot/amd_ucode.img /arch/boot/i686/archiso.img"
+      *arch32*)
+        label="$(strings "$ifile" | head -n 800000 | sed -n '/archisolabel/s@.*archisolabel=\([^ ]*\).*$@\1@p')"
+        linuxfile="/arch/boot/i686/vmlinuz-linux"
+        initrdfile="/arch/boot/intel-ucode.img /arch/boot/amd-ucode.img /arch/boot/i686/initramfs-linux.img"
         cmdline="archisobasedir=arch archisolabel=$label img_dev=/dev/disk/by-uuid/${GRUB_DEVICE_UUID} img_loop=\$iso_path earlymodules=loop"
         cmdline_appendix=""
         ;;
@@ -147,13 +147,12 @@ fi
 
 echo "submenu 'Bootable ISO images' {"
 
-for i in "${isodir}"/arch/*; do
+for i in "${isodir}"/arch/archlinux32*; do
   if ! test -f "$i"; then
     continue
   fi
-  echo "Found ArchLinux image: ${i} ..." >&2
-  iso_entry "$i" "--class arch" "arch"
-  empty=0
+  echo "Found ArchLinux32 image: ${i} ..." >&2
+  iso_entry "$i" "--class arch" "arch32"
 done
 
 for i in "${isodir}"/desinfect/* "${isodir}"/*Desinfect* "${isodir}"/*desinfect*; do
