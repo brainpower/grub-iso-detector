@@ -25,7 +25,11 @@ iso_entry()
   cmdline_add="$4"
   use_loopback=0
 
-  loopback_cfg="$(iso-info "$ifile" -f | awk '/loopback.cfg/ {print $2}')"
+  if ! iso_content="$(iso-info "$ifile" -f)" || [ -z "$iso_content" ]; then
+    printf "  ERROR: could not read iso information, file is likely not an iso image... skipping.\n" >&2
+    return
+  fi
+  loopback_cfg="$(echo "$iso_content" | awk '/loopback.cfg/ {print $2}')"
   if test -n "$loopback_cfg" && test -z "$cmdline_add"; then
     echo "  Found 'loopback.cfg' in iso, using that..." >&2
     use_loopback=1
@@ -34,14 +38,14 @@ iso_entry()
     case "$boottype" in
       *casper*|*ubuntu*)
         # TODO: These assume theres only a single kernel initramfs, better loop over them and create entries for every one?
-        linuxfile="$( iso-info "$ifile" -f | awk '/vmlinuz/ { print $2 }')"
-        initrdfile="$(iso-info "$ifile" -f | awk '/initrd/  { print $2 }')"
+        linuxfile="$( echo "$iso_content" | awk '/vmlinuz/ { print $2 }')"
+        initrdfile="$(echo "$iso_content" | awk '/initrd/  { print $2 }')"
         cmdline="boot=casper iso-scan/filename=$ifile noprompt noeject"
         cmdline_appendix=""
         ;;
       *desinfect*)
-        linuxfile="$( iso-info "$ifile" -f | awk '/vmlinuz.64/ { print $2 }')"
-        initrdfile="$(iso-info "$ifile" -f | awk '/initrd/  { print $2 }' | grep -v 'initrd.logo' | head -n 1)"
+        linuxfile="$( echo "$iso_content" | awk '/vmlinuz.64/ { print $2 }')"
+        initrdfile="$(echo "$iso_content" | awk '/initrd/  { print $2 }' | grep -v 'initrd.logo' | head -n 1)"
         cmdline="boot=casper iso-scan/filename=$ifile file=/cdrom/preseed/ubuntu.seed quiet splash memtest=4"
         cmdline_appendix="debian-installer/language=de console-setup/layoutcode?=de"
         ;;
@@ -62,9 +66,16 @@ iso_entry()
       *grml*)
         label="$(strings "$ifile" | head -n 600000 | sed -n '/bootid=/s@.*bootid=\([^ ]*\).*$@\1@p' | head -n 1)"
         lmpath="$(strings "$ifile" | head -n 600000 | sed -n '/live-media-path=/s@.*live-media-path=\([^ ]*\).*$@\1@p' | head -n 1)"
-        linuxfile="$( iso-info "$ifile" -f | awk '/vmlinuz/ { print $2 }')"
-        initrdfile="$(iso-info "$ifile" -f | awk '/initrd/  { print $2 }')"
+        linuxfile="$( echo "$iso_content" | awk '/vmlinuz/ { print $2 }')"
+        initrdfile="$(echo "$iso_content" | awk '/initrd/  { print $2 }')"
         cmdline="boot=live live-media-path=$lmpath bootid=$label apm=power-off vga=791 nomce net.ifnames=0"
+        cmdline_appendix=""
+        ;;
+      *samsungfw*)
+        label=""
+        linuxfile="/bzImage"
+        initrdfile="/initrd"
+        cmdline=""
         cmdline_appendix=""
         ;;
       *)
@@ -82,6 +93,7 @@ iso_entry()
 
 
   echo "menuentry '$(echo "$title" | grub_quote)' ${class} ${CLASS} \$menuentry_id_option 'gnulinux-$ifile' {"
+  echo "  rmmod tpm" # tpm module breaks loopback (error: out of memory)
   echo "  set iso_path=${ifile}"
   echo "  export iso_path"
 
@@ -147,15 +159,43 @@ fi
 
 echo "submenu 'Bootable ISO images' {"
 
-for i in "${isodir}"/arch/archlinux32*; do
+for i in "${isodir}"/*.iso; do
+  if ! test -f "$i"; then
+    continue
+  fi
+  echo "Found ISO image: ${i} ..." >&2
+  iso_entry "$i" "--class generic" "generic"
+  empty=0
+done
+
+for i in "${isodir}"/linux/*.iso; do
+  if ! test -f "$i"; then
+    continue
+  fi
+  echo "Found Linux ISO image: ${i} ..." >&2
+  iso_entry "$i" "--class linux" "linux"
+  empty=0
+done
+
+for i in "${isodir}"/arch/archlinux-*; do
+  if ! test -f "$i"; then
+    continue
+  fi
+  echo "Found ArchLinux image: ${i} ..." >&2
+  iso_entry "$i" "--class arch" "arch"
+  empty=0
+done
+
+for i in "${isodir}"/arch/archlinux32-*; do
   if ! test -f "$i"; then
     continue
   fi
   echo "Found ArchLinux32 image: ${i} ..." >&2
   iso_entry "$i" "--class arch" "arch32"
+  empty=0
 done
 
-for i in "${isodir}"/desinfect/* "${isodir}"/*Desinfect* "${isodir}"/*desinfect*; do
+for i in "${isodir}"/desinfect/*.iso; do
   if ! test -f "$i"; then
     continue
   fi
@@ -165,7 +205,16 @@ for i in "${isodir}"/desinfect/* "${isodir}"/*Desinfect* "${isodir}"/*desinfect*
   empty=0
 done
 
-for i in "${isodir}"/ubuntu/* "${isodir}"/*ubuntu* "${isodir}"/*Ubuntu*; do
+for i in "${isodir}"/debian/*.iso; do
+  if ! test -f "$i"; then
+    continue
+  fi
+  echo "Found Debian image: ${i} ..." >&2
+  iso_entry "$i" "--class debian" "debian"
+  empty=0
+done
+
+for i in "${isodir}"/ubuntu/*.iso; do
   if ! test -f "$i"; then
     continue
   fi
@@ -174,7 +223,7 @@ for i in "${isodir}"/ubuntu/* "${isodir}"/*ubuntu* "${isodir}"/*Ubuntu*; do
   empty=0
 done
 
-for i in "${isodir}"/manjaro/*; do
+for i in "${isodir}"/manjaro/*.iso; do
   if ! test -f "$i"; then
     continue
   fi
@@ -183,12 +232,22 @@ for i in "${isodir}"/manjaro/*; do
   empty=0
 done
 
-for i in "${isodir}"/grml/*; do
+for i in "${isodir}"/grml/*.iso; do
   if ! test -f "$i"; then
     continue
   fi
   echo "Found Grml image: ${i} ..." >&2
   iso_entry "$i" "--class grml" "grml"
+  empty=0
+done
+
+for i in "${isodir}"/samsungfw/*.iso; do
+  if ! test -f "$i"; then
+    continue
+  fi
+  echo "Found Samsung Firmware Update iso image: ${i} ..." >&2
+  # last arg is to skip loopback.cfg, the one in the samsung isos is unusable
+  iso_entry "$i" "--class unknown" "samsungfw" " "
   empty=0
 done
 
